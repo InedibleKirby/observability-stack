@@ -1,0 +1,13 @@
+---
+- hosts: all
+  name: Install node_exporter
+  become: true
+#  vars:
+#    proxy:
+#      https_proxy:
+
+  tasks:
+    - name: Install node_exporter
+      #https://github.com/prometheus-community/ansible/tree/main/roles/node_exporter
+      ansible.builtin.include_role:
+        name: prometheus.prometheus.node_exporter

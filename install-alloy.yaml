@@ -1,0 +1,63 @@
+---
+- hosts: all
+  name: Install alloy
+  become: true
+#  vars:
+#    proxy:
+#      https_proxy: 
+
+  tasks:
+    - name: Install Alloy
+      ansible.builtin.include_role:
+        name: grafana.grafana.alloy
+      vars:
+        env_file_vars: { "CUSTOM_ARGS":"--server.http.listen-addr=0.0.0.0:12345" }
+        config: |
+          prometheus.scrape "default" {
+            targets = [{"__address__" = "localhost:12345"}]
+            forward_to = [prometheus.remote_write.prom.receiver]
+          }
+          
+          prometheus.remote_write "prom" {
+            endpoint {
+                url = "http://prometheushost:9090/api/v1/write"
+            }
+          }
+          
+          prometheus.exporter.self "default" {
+          }
+
+          prometheus.scrape "metamonitoring" {
+            targets = prometheus.exporter.self.default.targets
+
+            forward_to = [prometheus.remote_write.default.receiver]
+            scrape_interval = "10s"
+          }
+
+          prometheus.remote_write "default" {
+            endpoint {
+              url = "http://prometheushost:9090/api/v1/write"
+            }
+          }
+
+          loki.source.api "listener" {
+            http {
+              listen_address = "{{ inventory_hostname }}"
+              listen_port    = 9999
+            }
+
+            labels = { source = "api" }
+
+            forward_to = [loki.write.default.receiver]
+          }
+
+          loki.write "default" {
+            endpoint {
+                url = "http://prometheushostFQDN:3100/loki/api/v1/push"
+            }
+          }
+
+    - name: Restart Alloy
+      ansible.builtin.service:
+        name: alloy
+        state: restarted

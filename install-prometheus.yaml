@@ -1,0 +1,21 @@
+---
+- hosts: all
+  name: Install prometheus
+  become: true
+#  vars:
+#    proxy:
+#      https_proxy: if proxy is needed put proxy here
+
+  tasks:
+    - name: Install Prometheus
+      #https://prometheus-community.github.io/ansible/branch/main/
+      #https://github.com/prometheus-community/ansible/tree/main/roles/prometheus
+      ansible.builtin.include_role:
+        name: prometheus.prometheus.prometheus
+      vars:
+        prometheus_targets:
+          node:
+          - targets:
+            - localhost:9100
+#            - targetnode:port
+        prometheus_config_flags_extra: { "web.enable-remote-write-receiver" }

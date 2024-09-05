@@ -1,0 +1,92 @@
+---
+- hosts: all
+  name: Install loki on RHEL8
+  become: true
+#  vars:
+#    proxy:
+#      https_proxy: 
+
+  tasks:
+
+    - name: Add user loki
+      ansible.builtin.user:
+        name: loki
+        shell: /bin/false
+        system: true
+        create_home: no
+
+    - name: Download
+      ansible.builtin.get_url:
+        url: "{{ item }}"
+        dest: /tmp
+        use_proxy: true
+      loop:
+        - https://github.com/grafana/loki/releases/download/v3.0.1/loki-linux-amd64.zip
+        - https://github.com/grafana/loki/releases/download/v3.0.1/promtail-linux-amd64.zip
+#      environment: "{{ proxy }}"
+
+    - name: Extract
+      ansible.builtin.unarchive:
+        src: /tmp/{{ item }}
+        dest: /tmp
+        remote_src: yes
+      loop:
+        - loki-linux-amd64.zip
+        - promtail-linux-amd64.zip
+
+    - name: Copy loki to /usr/local/bin
+      ansible.builtin.copy:
+        src: /tmp/{{ item }}
+        dest: /usr/local/bin/
+        owner: loki
+        group: loki
+        mode: u+x,g+x,o+x
+        remote_src: true
+      loop:
+        - loki-linux-amd64
+        - promtail-linux-amd64
+
+    - name: Download configs
+      ansible.builtin.get_url:
+        url: "{{ item }}"
+        dest: /usr/local/bin/
+        use_proxy: true
+      loop:
+        - https://raw.githubusercontent.com/grafana/loki/main/cmd/loki/loki-local-config.yaml
+        - https://raw.githubusercontent.com/grafana/loki/main/clients/cmd/promtail/promtail-local-config.yaml
+      environment: "{{ proxy }}"
+
+    - name: Create service loki.service
+      ansible.builtin.blockinfile:
+        path: /etc/systemd/system/loki.service
+        block: |
+          [Unit]
+          Description=Loki
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=loki
+          Group=loki
+          Type=simple
+          ExecStart=/usr/local/bin/loki-linux-amd64 --config.file=/usr/local/bin/loki-local-config.yaml
+
+          [Install]
+          WantedBy=multi-user.target
+        create: true
+
+    - name: systemctl daemon_reload
+      ansible.builtin.systemd_service:
+        daemon_reload: yes
+
+    - name: Start and Enable loki
+      ansible.builtin.service:
+        name: loki
+        state: started
+        enabled: yes
+
+    - name: Check whether port 3100 is available
+      ansible.builtin.wait_for:
+        port: 3100
+        state: started
+        timeout: 5
